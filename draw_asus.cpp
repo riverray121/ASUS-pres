@@ -79,10 +79,10 @@ private:
   void initializeLetterPoints()
   {
     float start_x = 2.0f;
-    float start_y = 5.5f;
-    float letter_height = 3.0f;
-    float letter_width = 1.5f;
-    float spacing = 2.0f;
+    float start_y = 5.0f;
+    float letter_height = 2.0f;
+    float letter_width = 1.0f;
+    float spacing = 1.5f;
 
     // Points for letter 'A'
     letter_points_.push_back(Point(start_x, start_y, PI/2));  // Bottom left
@@ -173,16 +173,16 @@ private:
     while (angle_diff > PI) angle_diff -= 2.0f * PI;
     while (angle_diff < -PI) angle_diff += 2.0f * PI;
 
-    if (fabsf(angle_diff) > 0.1) {
-      // Turn towards the target - increased rotation speed from 0.6 to 1.2
-      commandTurtle(0, angle_diff > 0 ? 1.2f : -1.2f);
+    if (fabsf(angle_diff) > 0.05) {
+      // Turn towards the target - increased rotation speed from 1.2 to 2.0
+      commandTurtle(0, angle_diff > 0 ? 2.0f : -2.0f);
     } else {
       // Move towards the target - increased speeds
       float distance = sqrt(dx*dx + dy*dy);
       if (target.pen_down) {
-        commandTurtle(std::min(2.0f, distance), 0);  // Increased from 1.0 to 2.0
+        commandTurtle(std::min(2.0f, distance), 0);
       } else {
-        commandTurtle(std::min(4.0f, distance), 0);  // Increased from 2.0 to 4.0
+        commandTurtle(std::min(4.0f, distance), 0);
       }
     }
 

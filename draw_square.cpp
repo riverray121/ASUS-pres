@@ -151,58 +151,6 @@ private:
     twist_pub_->publish(twist);
   }
 
-  void stopForward()
-  {
-    if (hasStopped()) {
-      RCLCPP_INFO(this->get_logger(), "Reached goal");
-      state_ = TURN;
-      goal_pose_.x = current_pose_.x;
-      goal_pose_.y = current_pose_.y;
-      goal_pose_.theta = fmod(current_pose_.theta + PI / 2.0f, 2.0f * PI);
-      // wrap goal_pose_.theta to [-pi, pi)
-      if (goal_pose_.theta >= PI) {
-        goal_pose_.theta -= 2.0f * PI;
-      }
-      printGoal();
-    } else {
-      commandTurtle(0, 0);
-    }
-  }
-
-  void stopTurn()
-  {
-    if (hasStopped()) {
-      RCLCPP_INFO(this->get_logger(), "Reached goal");
-      state_ = FORWARD;
-      goal_pose_.x = cos(current_pose_.theta) * 2 + current_pose_.x;
-      goal_pose_.y = sin(current_pose_.theta) * 2 + current_pose_.y;
-      goal_pose_.theta = current_pose_.theta;
-      printGoal();
-    } else {
-      commandTurtle(0, 0);
-    }
-  }
-
-  void forward()
-  {
-    if (hasReachedGoal()) {
-      state_ = STOP_FORWARD;
-      commandTurtle(0, 0);
-    } else {
-      commandTurtle(1.0f, 0);
-    }
-  }
-
-  void turn()
-  {
-    if (hasReachedGoal()) {
-      state_ = STOP_TURN;
-      commandTurtle(0, 0);
-    } else {
-      commandTurtle(0, 0.4f);
-    }
-  }
-
   void timerCallback()
   {
     if (!reset_result_.valid()) {
@@ -215,36 +163,53 @@ private:
 
     if (!first_goal_set_) {
       first_goal_set_ = true;
+      state_ = FORWARD;
       if (!points_.empty()) {
         goal_pose_.x = points_[0].x;
         goal_pose_.y = points_[0].y;
-        goal_pose_.theta = 0;
+        goal_pose_.theta = current_pose_.theta;
         printGoal();
       }
     }
 
-    if (state_ == FORWARD) {
-      if (hasReachedGoal()) {
-        state_ = STOP_FORWARD;
-        commandTurtle(0, 0);
-        current_point_++;
-        
-        if (current_point_ >= points_.size()) {
-          RCLCPP_INFO(this->get_logger(), "Drawing completed!");
-          return;
-        }
+    // Calculate angle to next point
+    if (current_point_ < points_.size()) {
+      float dx = points_[current_point_].x - current_pose_.x;
+      float dy = points_[current_point_].y - current_pose_.y;
+      float target_angle = atan2(dy, dx);
+      float angle_diff = target_angle - current_pose_.theta;
 
-        goal_pose_.x = points_[current_point_].x;
-        goal_pose_.y = points_[current_point_].y;
-        printGoal();
-      } else {
-        commandTurtle(1.0, 0);
-      }
-    } else if (state_ == STOP_FORWARD) {
-      if (hasStopped()) {
-        state_ = FORWARD;
-      } else {
-        commandTurtle(0, 0);
+      // Normalize angle difference to [-pi, pi]
+      while (angle_diff > PI) angle_diff -= 2.0f * PI;
+      while (angle_diff < -PI) angle_diff += 2.0f * PI;
+
+      if (state_ == FORWARD) {
+        if (fabsf(angle_diff) > 0.1) {
+          // Turn towards the target point
+          commandTurtle(0, angle_diff > 0 ? 0.6f : -0.6f);
+        } else if (hasReachedGoal()) {
+          state_ = STOP_FORWARD;
+          commandTurtle(0, 0);
+          current_point_++;
+          
+          if (current_point_ >= points_.size()) {
+            RCLCPP_INFO(this->get_logger(), "Drawing completed!");
+            return;
+          }
+
+          goal_pose_.x = points_[current_point_].x;
+          goal_pose_.y = points_[current_point_].y;
+          printGoal();
+        } else {
+          // Move towards the target point
+          commandTurtle(1.0, 0);
+        }
+      } else if (state_ == STOP_FORWARD) {
+        if (hasStopped()) {
+          state_ = FORWARD;
+        } else {
+          commandTurtle(0, 0);
+        }
       }
     }
   }

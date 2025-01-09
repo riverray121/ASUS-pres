@@ -218,7 +218,13 @@ private:
         goal_pose_.y = letter_points_[current_point_].y;
         printGoal();
       } else {
-        state_ = FINISHED;
+        // Reset to start a new drawing instead of finishing
+        current_point_ = 0;
+        state_ = MOVING;
+        goal_pose_.x = letter_points_[0].x;
+        goal_pose_.y = letter_points_[0].y;
+        printGoal();
+        RCLCPP_INFO(this->get_logger(), "Restarting drawing loop");
       }
     }
   }

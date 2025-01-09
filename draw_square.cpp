@@ -30,6 +30,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -59,6 +60,8 @@ public:
 
     auto empty = std::make_shared<std_srvs::srv::Empty::Request>();
     reset_result_ = reset_client_->async_send_request(empty).future;
+
+    initializeLetterPoints();
   }
 
 private:
@@ -69,6 +72,52 @@ private:
     TURN,
     STOP_TURN,
   };
+
+  struct Point {
+    float x;
+    float y;
+    Point(float _x, float _y) : x(_x), y(_y) {}
+  };
+
+  void initializeLetterPoints()
+  {
+    float start_x = 2.0f;
+    float start_y = 5.5f;
+    float letter_height = 3.0f;
+    float letter_width = 1.5f;
+    float spacing = 2.0f;
+
+    // Points for letter 'A'
+    points_.push_back(Point(start_x, start_y));  // Bottom left
+    points_.push_back(Point(start_x + letter_width/2, start_y + letter_height));  // Top middle
+    points_.push_back(Point(start_x + letter_width, start_y));  // Bottom right
+    points_.push_back(Point(start_x + letter_width/2, start_y + letter_height/2));  // Middle crossbar
+
+    // Points for letter 'S'
+    start_x += letter_width + spacing;
+    points_.push_back(Point(start_x + letter_width, start_y + letter_height));  // Top right
+    points_.push_back(Point(start_x, start_y + letter_height));  // Top left
+    points_.push_back(Point(start_x, start_y + letter_height/2));  // Middle left
+    points_.push_back(Point(start_x + letter_width, start_y + letter_height/2));  // Middle right
+    points_.push_back(Point(start_x + letter_width, start_y));  // Bottom right
+    points_.push_back(Point(start_x, start_y));  // Bottom left
+
+    // Points for first 'U'
+    start_x += letter_width + spacing;
+    points_.push_back(Point(start_x, start_y + letter_height));  // Top left
+    points_.push_back(Point(start_x, start_y));  // Bottom left
+    points_.push_back(Point(start_x + letter_width, start_y));  // Bottom right
+    points_.push_back(Point(start_x + letter_width, start_y + letter_height));  // Top right
+
+    // Points for second 'S'
+    start_x += letter_width + spacing;
+    points_.push_back(Point(start_x + letter_width, start_y + letter_height));  // Top right
+    points_.push_back(Point(start_x, start_y + letter_height));  // Top left
+    points_.push_back(Point(start_x, start_y + letter_height/2));  // Middle left
+    points_.push_back(Point(start_x + letter_width, start_y + letter_height/2));  // Middle right
+    points_.push_back(Point(start_x + letter_width, start_y));  // Bottom right
+    points_.push_back(Point(start_x, start_y));  // Bottom left
+  }
 
   void poseCallback(const turtlesim::msg::Pose & pose)
   {
@@ -166,21 +215,37 @@ private:
 
     if (!first_goal_set_) {
       first_goal_set_ = true;
-      state_ = FORWARD;
-      goal_pose_.x = cos(current_pose_.theta) * 2 + current_pose_.x;
-      goal_pose_.y = sin(current_pose_.theta) * 2 + current_pose_.y;
-      goal_pose_.theta = current_pose_.theta;
-      printGoal();
+      if (!points_.empty()) {
+        goal_pose_.x = points_[0].x;
+        goal_pose_.y = points_[0].y;
+        goal_pose_.theta = 0;
+        printGoal();
+      }
     }
 
     if (state_ == FORWARD) {
-      forward();
+      if (hasReachedGoal()) {
+        state_ = STOP_FORWARD;
+        commandTurtle(0, 0);
+        current_point_++;
+        
+        if (current_point_ >= points_.size()) {
+          RCLCPP_INFO(this->get_logger(), "Drawing completed!");
+          return;
+        }
+
+        goal_pose_.x = points_[current_point_].x;
+        goal_pose_.y = points_[current_point_].y;
+        printGoal();
+      } else {
+        commandTurtle(1.0, 0);
+      }
     } else if (state_ == STOP_FORWARD) {
-      stopForward();
-    } else if (state_ == TURN) {
-      turn();
-    } else if (state_ == STOP_TURN) {
-      stopTurn();
+      if (hasStopped()) {
+        state_ = FORWARD;
+      } else {
+        commandTurtle(0, 0);
+      }
     }
   }
 
@@ -195,6 +260,9 @@ private:
   rclcpp::Client<std_srvs::srv::Empty>::SharedPtr reset_client_;
   rclcpp::Client<std_srvs::srv::Empty>::SharedFuture reset_result_;
   rclcpp::TimerBase::SharedPtr timer_;
+
+  std::vector<Point> points_;
+  size_t current_point_ = 0;
 };
 
 int main(int argc, char ** argv)

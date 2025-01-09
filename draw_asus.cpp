@@ -41,10 +41,10 @@
 
 #define PI 3.141592f
 
-class DrawAsus final : public rclcpp::Node
+class DrawASUS final : public rclcpp::Node
 {
 public:
-  explicit DrawAsus(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+  explicit DrawASUS(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
   : rclcpp::Node("draw_asus", options)
   {
     const rclcpp::QoS qos = turtlesim::topic_qos();
@@ -52,59 +52,77 @@ public:
 
     pose_sub_ =
       this->create_subscription<turtlesim::msg::Pose>(
-      "turtle1/pose", qos, std::bind(&DrawAsus::poseCallback, this, std::placeholders::_1));
+      "turtle1/pose", qos, std::bind(&DrawASUS::poseCallback, this, std::placeholders::_1));
 
     reset_client_ = this->create_client<std_srvs::srv::Empty>("reset");
 
     timer_ = this->create_wall_timer(std::chrono::milliseconds(16), [this]() {timerCallback();});
 
-    // Initialize waypoints for ASUS
-    initializeWaypoints();
-
     auto empty = std::make_shared<std_srvs::srv::Empty::Request>();
     reset_result_ = reset_client_->async_send_request(empty).future;
+
+    // Initialize the points for drawing ASUS
+    initializeLetterPoints();
   }
 
 private:
-  struct Waypoint {
+  struct Point {
     float x;
     float y;
+    float theta;
+    bool pen_down;  // Whether to draw while moving to this point
+    
+    Point(float _x, float _y, float _theta, bool _pen_down = true)
+    : x(_x), y(_y), theta(_theta), pen_down(_pen_down) {}
   };
 
-  void initializeWaypoints()
+  void initializeLetterPoints()
   {
-    // Each letter will be 2x2 units, with 0.5 units spacing between letters
-    // Starting at origin (0,0)
-    
-    // Letter A
-    waypoints_.push_back({0.0f, 0.0f});      // Start at bottom left
-    waypoints_.push_back({1.0f, 2.0f});      // Up to peak
-    waypoints_.push_back({2.0f, 0.0f});      // Down to bottom right
-    waypoints_.push_back({0.5f, 1.0f});      // Back to middle left
-    waypoints_.push_back({1.5f, 1.0f});      // Across to middle right
-    
-    // Letter S
-    waypoints_.push_back({2.5f, 0.0f});      // Move to start of S
-    waypoints_.push_back({4.5f, 0.0f});      // Bottom of S
-    waypoints_.push_back({4.5f, 1.0f});      // Up
-    waypoints_.push_back({2.5f, 1.0f});      // Across
-    waypoints_.push_back({2.5f, 2.0f});      // Up
-    waypoints_.push_back({4.5f, 2.0f});      // Top of S
+    float start_x = 2.0f;
+    float start_y = 5.5f;
+    float letter_height = 3.0f;
+    float letter_width = 1.5f;
+    float spacing = 2.0f;
 
-    // Letter U
-    waypoints_.push_back({5.0f, 2.0f});      // Move to start of U
-    waypoints_.push_back({5.0f, 0.0f});      // Down
-    waypoints_.push_back({7.0f, 0.0f});      // Across
-    waypoints_.push_back({7.0f, 2.0f});      // Up
+    // Points for letter 'A'
+    letter_points_.push_back(Point(start_x, start_y, PI/2));  // Bottom left
+    letter_points_.push_back(Point(start_x + letter_width/2, start_y + letter_height, PI/2));  // Top middle
+    letter_points_.push_back(Point(start_x + letter_width, start_y, PI/2));  // Bottom right
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height/2, 0, false));  // Move to middle right
+    letter_points_.push_back(Point(start_x, start_y + letter_height/2, 0));  // Middle crossbar
 
-    // Letter S
-    waypoints_.push_back({7.5f, 2.0f});      // Move to start of final S
-    waypoints_.push_back({9.5f, 2.0f});      // Top of S
-    waypoints_.push_back({9.5f, 1.0f});      // Down
-    waypoints_.push_back({7.5f, 1.0f});      // Across
-    waypoints_.push_back({7.5f, 0.0f});      // Down
-    waypoints_.push_back({9.5f, 0.0f});      // Bottom of S
+    // Points for letter 'S'
+    start_x += letter_width + spacing;
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height, 0, false));  // Move to top right
+    letter_points_.push_back(Point(start_x, start_y + letter_height, 0));  // Top horizontal
+    letter_points_.push_back(Point(start_x, start_y + letter_height/2, 0));  // Middle left
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height/2, 0));  // Middle right
+    letter_points_.push_back(Point(start_x + letter_width, start_y, 0));  // Bottom right
+    letter_points_.push_back(Point(start_x, start_y, 0));  // Bottom horizontal
+
+    // Points for first 'U'
+    start_x += letter_width + spacing;
+    letter_points_.push_back(Point(start_x, start_y + letter_height, 0, false));  // Move to top left
+    letter_points_.push_back(Point(start_x, start_y, 0));  // Down left
+    letter_points_.push_back(Point(start_x + letter_width, start_y, 0));  // Bottom
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height, 0));  // Up right
+
+    // Points for second 'S'
+    start_x += letter_width + spacing;
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height, 0, false));  // Move to top right
+    letter_points_.push_back(Point(start_x, start_y + letter_height, 0));  // Top horizontal
+    letter_points_.push_back(Point(start_x, start_y + letter_height/2, 0));  // Middle left
+    letter_points_.push_back(Point(start_x + letter_width, start_y + letter_height/2, 0));  // Middle right
+    letter_points_.push_back(Point(start_x + letter_width, start_y, 0));  // Bottom right
+    letter_points_.push_back(Point(start_x, start_y, 0));  // Bottom horizontal
   }
+
+  enum State
+  {
+    MOVING,
+    STOPPING,
+    FINISHED
+  };
 
   void poseCallback(const turtlesim::msg::Pose & pose)
   {
@@ -137,38 +155,40 @@ private:
     twist_pub_->publish(twist);
   }
 
-  void moveToNextWaypoint()
+  void moveToNextPoint()
   {
-    if (current_waypoint_ >= waypoints_.size()) {
+    if (current_point_ >= letter_points_.size()) {
+      state_ = FINISHED;
       commandTurtle(0, 0);
-      RCLCPP_INFO(this->get_logger(), "Drawing completed!");
       return;
     }
 
-    goal_pose_.x = waypoints_[current_waypoint_].x;
-    goal_pose_.y = waypoints_[current_waypoint_].y;
-    
-    // Calculate angle to target
-    float dx = goal_pose_.x - current_pose_.x;
-    float dy = goal_pose_.y - current_pose_.y;
-    float target_theta = atan2(dy, dx);
-    
-    float angle_diff = target_theta - current_pose_.theta;
-    // Normalize angle
-    while (angle_diff > PI) angle_diff -= 2 * PI;
-    while (angle_diff < -PI) angle_diff += 2 * PI;
+    const Point& target = letter_points_[current_point_];
+    float dx = target.x - current_pose_.x;
+    float dy = target.y - current_pose_.y;
+    float target_angle = atan2(dy, dx);
+    float angle_diff = target_angle - current_pose_.theta;
 
-    if (fabs(angle_diff) > 0.1) {
-      // Turn towards target
-      commandTurtle(0, angle_diff > 0 ? 0.4f : -0.4f);
+    // Normalize angle difference to [-pi, pi]
+    while (angle_diff > PI) angle_diff -= 2.0f * PI;
+    while (angle_diff < -PI) angle_diff += 2.0f * PI;
+
+    if (fabsf(angle_diff) > 0.1) {
+      // Turn towards the target - increased rotation speed from 0.6 to 1.2
+      commandTurtle(0, angle_diff > 0 ? 1.2f : -1.2f);
     } else {
-      // Move towards target
-      commandTurtle(0.4f, 0);
+      // Move towards the target - increased speeds
+      float distance = sqrt(dx*dx + dy*dy);
+      if (target.pen_down) {
+        commandTurtle(std::min(2.0f, distance), 0);  // Increased from 1.0 to 2.0
+      } else {
+        commandTurtle(std::min(4.0f, distance), 0);  // Increased from 2.0 to 4.0
+      }
     }
 
     if (hasReachedGoal()) {
-      current_waypoint_++;
-      printGoal();
+      state_ = STOPPING;
+      commandTurtle(0, 0);
     }
   }
 
@@ -178,14 +198,38 @@ private:
       return;
     }
 
-    moveToNextWaypoint();
+    if (!first_goal_set_) {
+      first_goal_set_ = true;
+      state_ = MOVING;
+      if (!letter_points_.empty()) {
+        goal_pose_.x = letter_points_[0].x;
+        goal_pose_.y = letter_points_[0].y;
+        printGoal();
+      }
+    }
+
+    if (state_ == MOVING) {
+      moveToNextPoint();
+    } else if (state_ == STOPPING && hasStopped()) {
+      current_point_++;
+      if (current_point_ < letter_points_.size()) {
+        state_ = MOVING;
+        goal_pose_.x = letter_points_[current_point_].x;
+        goal_pose_.y = letter_points_[current_point_].y;
+        printGoal();
+      } else {
+        state_ = FINISHED;
+      }
+    }
   }
 
+  std::vector<Point> letter_points_;
+  size_t current_point_ = 0;
   turtlesim::msg::Pose current_pose_;
   turtlesim::msg::Pose goal_pose_;
+  bool first_goal_set_ = false;
   bool first_pose_set_ = false;
-  size_t current_waypoint_ = 0;
-  std::vector<Waypoint> waypoints_;
+  State state_ = MOVING;
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
   rclcpp::Subscription<turtlesim::msg::Pose>::SharedPtr pose_sub_;
@@ -197,7 +241,7 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  auto nh = std::make_shared<DrawAsus>();
+  auto nh = std::make_shared<DrawASUS>();
   rclcpp::spin(nh);
   rclcpp::shutdown();
   return 0;

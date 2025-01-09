@@ -68,9 +68,7 @@ private:
   enum State
   {
     FORWARD,
-    STOP_FORWARD,
-    TURN,
-    STOP_TURN,
+    STOP_FORWARD
   };
 
   struct Point {
@@ -128,8 +126,7 @@ private:
   bool hasReachedGoal()
   {
     return fabsf(current_pose_.x - goal_pose_.x) < 0.1 &&
-           fabsf(current_pose_.y - goal_pose_.y) < 0.1 &&
-           fabsf(current_pose_.theta - goal_pose_.theta) < 0.01;
+           fabsf(current_pose_.y - goal_pose_.y) < 0.1;
   }
 
   bool hasStopped()
@@ -153,11 +150,7 @@ private:
 
   void timerCallback()
   {
-    if (!reset_result_.valid()) {
-      return;
-    }
-
-    if (!first_pose_set_) {
+    if (!reset_result_.valid() || !first_pose_set_) {
       return;
     }
 
@@ -167,49 +160,49 @@ private:
       if (!points_.empty()) {
         goal_pose_.x = points_[0].x;
         goal_pose_.y = points_[0].y;
-        goal_pose_.theta = current_pose_.theta;
         printGoal();
       }
     }
 
-    // Calculate angle to next point
-    if (current_point_ < points_.size()) {
-      float dx = points_[current_point_].x - current_pose_.x;
-      float dy = points_[current_point_].y - current_pose_.y;
-      float target_angle = atan2(dy, dx);
-      float angle_diff = target_angle - current_pose_.theta;
+    if (current_point_ >= points_.size()) {
+      commandTurtle(0, 0);
+      return;
+    }
 
-      // Normalize angle difference to [-pi, pi]
-      while (angle_diff > PI) angle_diff -= 2.0f * PI;
-      while (angle_diff < -PI) angle_diff += 2.0f * PI;
+    float dx = points_[current_point_].x - current_pose_.x;
+    float dy = points_[current_point_].y - current_pose_.y;
+    float target_angle = atan2(dy, dx);
+    float angle_diff = target_angle - current_pose_.theta;
 
-      if (state_ == FORWARD) {
-        if (fabsf(angle_diff) > 0.1) {
-          // Turn towards the target point
-          commandTurtle(0, angle_diff > 0 ? 0.6f : -0.6f);
-        } else if (hasReachedGoal()) {
-          state_ = STOP_FORWARD;
-          commandTurtle(0, 0);
-          current_point_++;
-          
-          if (current_point_ >= points_.size()) {
-            RCLCPP_INFO(this->get_logger(), "Drawing completed!");
-            return;
-          }
+    // Normalize angle difference to [-pi, pi]
+    while (angle_diff > PI) angle_diff -= 2.0f * PI;
+    while (angle_diff < -PI) angle_diff += 2.0f * PI;
 
+    if (state_ == FORWARD) {
+      if (fabsf(angle_diff) > 0.1) {
+        // Turn towards the target point
+        commandTurtle(0, angle_diff > 0 ? 0.6f : -0.6f);
+      } else if (hasReachedGoal()) {
+        state_ = STOP_FORWARD;
+        commandTurtle(0, 0);
+        current_point_++;
+        
+        if (current_point_ < points_.size()) {
           goal_pose_.x = points_[current_point_].x;
           goal_pose_.y = points_[current_point_].y;
           printGoal();
         } else {
-          // Move towards the target point
-          commandTurtle(1.0, 0);
+          RCLCPP_INFO(this->get_logger(), "Drawing completed!");
         }
-      } else if (state_ == STOP_FORWARD) {
-        if (hasStopped()) {
-          state_ = FORWARD;
-        } else {
-          commandTurtle(0, 0);
-        }
+      } else {
+        // Move towards the target point
+        commandTurtle(0.8, 0);
+      }
+    } else if (state_ == STOP_FORWARD) {
+      if (hasStopped()) {
+        state_ = FORWARD;
+      } else {
+        commandTurtle(0, 0);
       }
     }
   }

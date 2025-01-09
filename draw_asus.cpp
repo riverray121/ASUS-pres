@@ -138,7 +138,7 @@ private:
 
   bool hasStopped()
   {
-    return current_pose_.angular_velocity < 0.0001 && current_pose_.linear_velocity < 0.0001;
+    return current_pose_.angular_velocity < 0.01 && current_pose_.linear_velocity < 0.01;
   }
 
   void printGoal()
